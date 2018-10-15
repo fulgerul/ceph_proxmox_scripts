@@ -72,3 +72,5 @@ sudo vi /etc/ceph/admin.secret
 mkdir /mnt/ceph/
 sudo vi /etc/fstab
 192.168.1.11:6789,192.168.1.12:6789:/ /mnt/ceph/ ceph _netdev,name=admin,secretfile=/etc/ceph/admin.secret 0 0
+
+# TODO: Authorize per folder instead of giving full access
