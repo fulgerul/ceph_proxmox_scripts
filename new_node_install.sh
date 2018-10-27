@@ -1,11 +1,23 @@
+# On the client machine - clear old IP ssh key
+vi .ssh/known_hosts
+
+# Swap to free distroupgrade
+echo -e "deb http://ftp.se.debian.org/debian stretch main contrib\n\n# security updates\ndeb http://security.debian.org stretch/updates main contrib\ndeb http://download.proxmox.com/debian stretch pve-no-subscription" > /etc/apt/sources.list
+echo "" > /etc/apt/sources.list.d/pve-enterprise.list
+
 apt-get update
-apt-get upgrade 
-apt-get install iperf3
-apt-get install net-tools
+apt-get dist-upgrade -y
+apt-get upgrade -y
+
+reboot
+
+apt-get install iperf3 -y
+apt-get install net-tools -y
+# 12 is one of the cluster nodes
+pvecm add 192.168.1.12
 pveceph install --version luminous
 pveceph createmon
 pveceph createmgr
-pvecm add 192.168.1.12
 PS1='\[\e]2;\u@\H \w\a${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
 # .bashrc
 # /etc/sysctl.conf
@@ -14,7 +26,7 @@ PS1='\[\e]2;\u@\H \w\a${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\0
 # zap_disk.sh
 # iperf -s
 # iperf3 -P 20 -c 172.16.1.13
-# /etc/network/interfaces 
+# /etc/network/interfaces
 
 # create a bond of 2 nics with broadcast on 2 slave ports
 #
