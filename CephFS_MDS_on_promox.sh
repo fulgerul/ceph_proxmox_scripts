@@ -3,9 +3,10 @@
 #
 
 ## On MDS Node 1 (name=pve11 / ip 192.168.1.11)
-mkdir /var/lib/ceph/mds/ceph-pve11
-chown -R ceph:ceph /var/lib/ceph/mds/ceph-pve11
-ceph --cluster ceph --name client.bootstrap-mds --keyring /var/lib/ceph/bootstrap-mds/ceph.keyring auth get-or-create mds.pve11 osd 'allow rwx' mds 'allow' mon 'allow profile mds' -o /var/lib/ceph/mds/ceph-pve11/keyring
+apt install ceph-mds -y
+mkdir -p /var/lib/ceph/mds/ceph-$HOSTNAME
+chown -R ceph:ceph /var/lib/ceph/mds/ceph-$HOSTNAME
+ceph --cluster ceph --name client.bootstrap-mds --keyring /var/lib/ceph/bootstrap-mds/ceph.keyring auth get-or-create mds.$HOSTNAME osd 'allow rwx' mds 'allow' mon 'allow profile mds' -o /var/lib/ceph/mds/ceph-$HOSTNAME/keyring
 
 vi /etc/ceph/ceph.conf
 
@@ -15,16 +16,19 @@ vi /etc/ceph/ceph.conf
 [mds.pve11]
         host = 192.168.1.11
 
-systemctl start ceph-mds@pve11
+systemctl start ceph-mds@$HOSTNAME
 # Status should read started
-systemctl status ceph-mds@pve11
+systemctl status ceph-mds@$HOSTNAME
 # Enable at start
-systemctl enable ceph-mds@pve11
+systemctl enable ceph-mds@$HOSTNAME
 
 ## On MDS Node 2 (name=pve12 / ip 192.168.1.12)
-mkdir /var/lib/ceph/mds/ceph-pve12
-chown -R ceph:ceph /var/lib/ceph/mds/ceph-pve12
-ceph --cluster ceph --name client.bootstrap-mds --keyring /var/lib/ceph/bootstrap-mds/ceph.keyring auth get-or-create mds.pve12 osd 'allow rwx' mds 'allow' mon 'allow profile mds' -o /var/lib/ceph/mds/ceph-pve12/keyring
+
+# Define slave node name
+apt install ceph-mds -y
+mkdir -p /var/lib/ceph/mds/ceph-$HOSTNAME
+chown -R ceph:ceph /var/lib/ceph/mds/ceph-$HOSTNAME
+ceph --cluster ceph --name client.bootstrap-mds --keyring /var/lib/ceph/bootstrap-mds/ceph.keyring auth get-or-create mds.$HOSTNAME osd 'allow rwx' mds 'allow' mon 'allow profile mds' -o /var/lib/ceph/mds/ceph-$HOSTNAME/keyring
 
 vi /etc/ceph/ceph.conf
 
@@ -36,11 +40,11 @@ vi /etc/ceph/ceph.conf
 [mds.pve12]
         host = 192.168.1.12
 
-systemctl start ceph-mds@pve12
+systemctl start ceph-mds@$HOSTNAME
 # Status should read started
-systemctl status ceph-mds@pve12
+systemctl status ceph-mds@$HOSTNAME
 # Enable at start
-systemctl enable ceph-mds@pve12
+systemctl enable ceph-mds@$HOSTNAME
 
 
 # Useful commands on the MDSes
