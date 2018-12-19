@@ -3,7 +3,7 @@
 #
 
 ## On MDS Node 1 (name=pve11 / ip 192.168.1.11)
-apt install ceph-mds -y
+apt-get install ceph-mds -y
 mkdir -p /var/lib/ceph/mds/ceph-$HOSTNAME
 chown -R ceph:ceph /var/lib/ceph/mds/ceph-$HOSTNAME
 ceph --cluster ceph --name client.bootstrap-mds --keyring /var/lib/ceph/bootstrap-mds/ceph.keyring auth get-or-create mds.$HOSTNAME osd 'allow rwx' mds 'allow' mon 'allow profile mds' -o /var/lib/ceph/mds/ceph-$HOSTNAME/keyring

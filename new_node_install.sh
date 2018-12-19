@@ -63,4 +63,6 @@ PS1='\[\e]2;\u@\H \w\a${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\0
 #        mtu 9000
 
 # cat /proc/net/bonding/bond0
+
+# Change NIC config without rebooting
 # /etc/init.d/networking stop && /etc/init.d/networking start

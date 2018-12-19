@@ -1,4 +1,14 @@
-## Install Proxmox on SSD - diff IP!
+## Migrate Proxmox OS from HDD to SSD - diff IP!
+# Overview
+# Machine 192.168.1.12 will have a clean SSD installed with a clean OS
+# OS will be upgraded
+# Environment will be Setup
+# Ceph packages will be installed and a new node (now 192.168.1.21) will be added to ceph
+# All OSDs will be moved to this new host in CRUSH
+# Ceph MDS will be installed
+
+# Backup while booted on the HDD
+cp -R /etc /root/pveetc
 
 
 ## Setup env
@@ -12,20 +22,63 @@ apt-get update
 apt-get dist-upgrade -y
 
 
-apt-get install iperf3 net-tools nmon -y
+apt-get install iperf3 net-tools nmon ceph-mds -y
 
-## Ensure you have both NICs set
-# vi /etc/network/interfaces
+## Ensure you have both NICs configured
+vi /etc/network/interfaces
 /etc/init.d/networking stop && /etc/init.d/networking start
 
+# Reboot to get new kernel
 reboot
 
+## Join cluster to get configs
+pvecm add 192.168.1.11
+
 pveceph install --version luminous
+pveceph createmon
+pveceph createmgr
 ceph osd crush add-bucket $HOSTNAME host
 ceph osd crush move $HOSTNAME root=default
 ceph osd crush move osd.1 host=$HOSTNAME
 
-reboot
+# Follow CephFS_MDS_on_proxmox.sh to get CephFS working
+
+# Dont forget to add node to the HA group in the WebGUI!
+
+
+## PCI Passthrough
+scp -r root@192.168.1.11:/etc/modules /etc/modules
+scp -r root@192.168.1.11:/etc/modprobe.d/ /etc/modprobe.d/
+scp -r root@192.168.1.11:/etc/default/grub /etc/default/grub
+update-grub
+
+
+
+
+
+######################################
+# Reading from the old HDD
+
+# Get the SSD UUID
+cat /boot/grub/grub.cfg | grep lvmid/
+
+# Get HDD UUID
+vgdisplay
+
+vgrename <HDD VG UUID> old_pve
+
+# Activate new lvm partition
+vgchange -ay old_pve
+
+# Mount
+mount /dev/old_pve/root /mnt/old_pve/
+
+# Copy data from old HDD to SSD
+cp -vfR /mnt/old_pve/etc/modules /etc/modules
+cp -vfR /mnt/old_pve/etc/modprobe.d /etc/modprobe.d
+cp -vfR /mnt/old_pve/etc/default/grub /etc/default/grub
+cp -v /mnt/old_pve/usr/share/kvm/gtx750ti.rom /usr/share/kvm/
+cp -v /mnt/old_pve/var/lib/vz/template/iso/* /mnt/pve/ceph_fs_proxmox/template/iso/
 
 # Remove old name from ceph
 PVEOLDNODE=pve3
@@ -36,16 +89,3 @@ ceph osd crush rm $PVEOLDNODE
 
 pvecm delnode $PVEOLDNODE
 rm -fr /etc/pve/nodes/$PVEOLDNODE
-
-# Follow CephFS_MDS_on_proxmox.sh
-
-# Put in old HDD
-vgdisplay
-
-vgrename <HDD VG UUID> <new_name>
-
-# Activate new lvm partition
-vgchange -ay <new_name>
-
-# Mount
-mount /dev/<new_name>/root /mnt/<new_name>/
