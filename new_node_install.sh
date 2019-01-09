@@ -65,3 +65,16 @@ PS1='\[\e]2;\u@\H \w\a${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\0
 
 # Change NIC config without rebooting
 # /etc/init.d/networking stop && /etc/init.d/networking start
+
+
+# Fix for:
+# perl: warning: Setting locale failed.
+# perl: warning: Please check that your locale settings:
+#    LANGUAGE = (unset),
+#    LC_ALL = (unset),
+#    LANG = "en_US.UTF-8"
+# are supported and installed on your system.
+# perl: warning: Falling back to the standard locale ("C").
+sed -i 's/.*AcceptEnv LANG LC_\*.*/# AcceptEnv LANG LC_* # Fix for perl: warning: Setting locale failed./' /etc/ssh/sshd_config
+service ssh reload
+# exit; Reconnect
