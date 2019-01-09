@@ -7,7 +7,6 @@ echo "" > /etc/apt/sources.list.d/pve-enterprise.list
 
 apt-get update
 apt-get dist-upgrade -y
-apt-get upgrade -y
 apt-get install iperf3 net-tools nmon -y
 
 reboot
