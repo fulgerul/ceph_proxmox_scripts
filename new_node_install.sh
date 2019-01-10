@@ -75,6 +75,6 @@ PS1='\[\e]2;\u@\H \w\a${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\0
 #    LANG = "en_US.UTF-8"
 # are supported and installed on your system.
 # perl: warning: Falling back to the standard locale ("C").
-sed -i 's/.*AcceptEnv LANG LC_\*.*/# AcceptEnv LANG LC_* # Fix for perl: warning: Setting locale failed./' /etc/ssh/sshd_config
+sed -i 's/.*AcceptEnv LANG LC_\*.*/AcceptEnv LANG LC_PVE_* # Fix for perl: warning: Setting locale failed./' /etc/ssh/sshd_config
 service ssh reload
 # exit; Reconnect
