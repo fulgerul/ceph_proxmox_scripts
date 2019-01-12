@@ -32,10 +32,16 @@ pvecm add 192.168.1.11
 # In case of ""* this host already contains virtual guests"
 # "Check if node may join a cluster failed!""
 # pvecm add 192.168.1.11 -force
+apt-get upgrade 
+apt-get install iperf3
+apt-get install net-tools
 pveceph install --version luminous
 
 # edit ceph.conf
 pveceph createmon & pveceph createmgr
+pveceph createmon
+pveceph createmgr
+pvecm add 192.168.1.12
 PS1='\[\e]2;\u@\H \w\a${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
 # .bashrc
 # /etc/sysctl.conf
@@ -44,7 +50,7 @@ PS1='\[\e]2;\u@\H \w\a${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\0
 # zap_disk.sh
 # iperf -s
 # iperf3 -P 20 -c 172.16.1.13
-# /etc/network/interfaces
+# /etc/network/interfaces 
 
 # create a bond of 2 nics with broadcast on 2 slave ports
 #
