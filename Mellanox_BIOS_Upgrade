@@ -1,0 +1,68 @@
+#### Upgrade MELLANOX FW on proxmox
+#### Working notes, please check that you have the correct fw before applying anything!!
+
+### Identify the NIC FW version
+
+lspci | grep Mellanox
+
+apt-get install mstflint ethtool
+
+mstflint -d 03:00.0 q
+
+lspci -vv -s 03:00.0 | grep "Part number" -A 3
+
+modinfo mlx4_core
+
+### Debian version check
+hostnamectl
+
+ethtool -i eth2
+
+### Install from .deb pkg with apt-get
+
+wget -qO - http://www.mellanox.com/downloads/ofed/RPM-GPG-KEY-Mellanox | apt-key add -
+
+apt-get update
+
+apt-get install mlnx-en-dpdk
+
+
+
+### Update firmware online
+# Wasnt able to install  mlnx-fw-updater...
+apt-get install mlnx-fw-updater
+mlxfwmanager --online -u -d 0000:03:00.0
+
+### Manual update
+
+# Step 1. Get the device’s PSID.
+mlxfwmanager_pci | grep PSID PSID: MT_1210110019
+PSID: MT_1210110019
+
+# Step 2. Download the firmware BIN file from the Mellanox website or the OEM website.
+# Step 3. Burn the firmware.
+mlxfwmanager_pci -i file.bin
+
+#Step 4. Reboot your machine after the firmware burning is completed
+
+
+PSID:                HP_0CD0310010
+wget https://downloads.hpe.com/pub/softlib2/software1/pubsw-linux/p1757459824/v78298/fw-ConnectX2-516937-B21_C1-2_9_1200-Flexboot-3_3_500_linux.bin
+
+mstflint -d 0f:00.0 -i fw-ConnectX2-516937-B21_C1-2_9_1200-Flexboot-3_3_500_linux.bin -nofs burn
+
+wget https://downloads.hpe.com/pub/softlib2/software1/pubsw-linux/p1757459824/v94837/fw-ConnectX2-rel-2_9_1530-516937-B21_C1-C2-Flexboot-3.3.500.bin
+
+mstflint --allow_psid_change -d 03:00.0 -i fw-ConnectX2-rel-2_9_1200-MNPA19_A1-A3-FlexBoot-3.3.400.bin -nofs burn
+
+## Temperature check disable - if temp is too high the NIC will shutdown!
+# Never tested
+
+# Check status
+mlxconfig -d /dev/mst/mt4115_pciconf0 query | grep SW_RECOVERY_ON_ERRORS
+
+# Enable
+mlxconfig -d /dev/mst/mt4115_pciconf0 set SW_RECOVERY_ON_ERRORS=true
+
+# Check dumps from the NIC
+cat /proc/driver/mlx4_core/crdump/file
