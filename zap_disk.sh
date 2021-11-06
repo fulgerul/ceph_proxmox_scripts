@@ -24,9 +24,6 @@ sgdisk -g /dev/$devname
 echo "*** Running ...\tpartprobe"
 partprobe /dev/$devname
 
-echo "*** Running ...\tceph-disk zap /dev/$devname\n"
-ceph-disk zap /dev/$devname
-
 echo "*** Running ...\tceph osd out $osdnr\n"
 ceph osd out $osdnr
 
@@ -38,6 +35,9 @@ ceph auth del osd.$osdnr
 
 echo "*** Running ...\tceph osd rm $osdnr\n"
 ceph osd rm $osdnr
+
+echo "*** Running ...\trmdir /var/lib/ceph/osd/ceph-$osdnr"
+rmdir /var/lib/ceph/osd/ceph-$osdnr
 
 
 echo "*** Running ...\tpartprobe\n"

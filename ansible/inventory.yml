@@ -1,0 +1,26 @@
+---
+proxmox:
+  hosts:
+    192.168.1.21:
+    192.168.1.22:
+    192.168.1.23:
+  vars:
+    ansible_user: root
+
+linux_debian:
+  hosts:
+    192.168.1.168:
+  vars:
+    ansible_connection: ssh
+    ansible_user: user
+    ansible_password: 
+    ansible_become_password: 
+
+linux_old_debian:
+  hosts:
+    192.168.1.72:
+  vars:
+    ansible_connection: ssh
+    ansible_user: citizenx
+    ansible_password: 
+    ansible_become_password: 

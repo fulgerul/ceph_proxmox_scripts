@@ -1,48 +1,14 @@
-# On the client machine - clear old IP ssh key
-vi .ssh/known_hosts
-
-# Swap to free distroupgrade
-echo -e "deb http://ftp.se.debian.org/debian stretch main contrib\n\n# security updates\ndeb http://security.debian.org stretch/updates main contrib\ndeb http://download.proxmox.com/debian stretch pve-no-subscription" > /etc/apt/sources.list
-echo "" > /etc/apt/sources.list.d/pve-enterprise.list
-
 apt-get update
-apt-get dist-upgrade -y
-apt-get install iperf3 net-tools nmon -y
-
-reboot
-
-# Make sure the network cards are setup!
-
-# .11 is one of the cluster nodes
-pvecm add 192.168.1.11
-
-## Full reset of cluster - run on all nodes
-# systemctl stop pve-cluster
-# systemctl stop corosync
-# pmxcfs -l
-## Backup
-# cp -R /etc/pve etcpve/
-# rm /etc/pve/corosync.conf
-# rm -R /etc/corosync/*
-# killall pmxcfs
-# rm -R /var/lib/corosync/*
-# systemctl start pve-cluster
-# pvecm create HOMELAB
-
-# In case of ""* this host already contains virtual guests"
-# "Check if node may join a cluster failed!""
-# pvecm add 192.168.1.11 -force
-apt-get upgrade 
+apt full-upgrade
 apt-get install iperf3
 apt-get install net-tools
 pveceph install --version luminous
-
-# edit ceph.conf
-pveceph createmon & pveceph createmgr
 pveceph createmon
 pveceph createmgr
 pvecm add 192.168.1.12
 PS1='\[\e]2;\u@\H \w\a${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
+
+
 # .bashrc
 # /etc/sysctl.conf
 # /etc/apt/sources.list
@@ -68,19 +34,10 @@ PS1='\[\e]2;\u@\H \w\a${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\0
 #        mtu 9000
 
 # cat /proc/net/bonding/bond0
-
-# Change NIC config without rebooting
 # /etc/init.d/networking stop && /etc/init.d/networking start
 
-
-# Fix for:
-# perl: warning: Setting locale failed.
-# perl: warning: Please check that your locale settings:
-#    LANGUAGE = (unset),
-#    LC_ALL = (unset),
-#    LANG = "en_US.UTF-8"
-# are supported and installed on your system.
-# perl: warning: Falling back to the standard locale ("C").
-sed -i 's/.*AcceptEnv LANG LC_\*.*/AcceptEnv LANG LC_PVE_* # Fix for perl: warning: Setting locale failed./' /etc/ssh/sshd_config
-service ssh reload
-# exit; Reconnect
+# Reinstall of a node member
+# ssh-keygen -f "/etc/ssh/ssh_known_hosts" -R "192.168.1.23"
+# vi .ssh/known_hosts
+# On the cluster: vi /etc/pve/corosync.conf
+# Address to a working cluster node: pvecm add 192.168.1.21

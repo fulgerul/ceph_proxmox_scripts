@@ -1,0 +1,400 @@
+
+## Split the NVMe into 5x 180gb devices
+ceph-volume lvm batch --osds-per-device 5 /dev/nvme0n1
+
+## Stop & out last OSD as fast as possible in Proxmox GUI! (this will be used for journals/swap and MonDB)
+
+
+## Destroy the last NVMe partition in Proxmox GUI once OSD is empty - freeing up 180gb for journals/swap and MonDB
+
+
+## Add the HDD OSDs in Proxmox GUI with journals on NVMe
+
+## Add new partition to the NVMe for swap
+
+## Add new partition for Ceph MonDB
+
+# Create partition
+
+# Format the partition
+
+# Stop&destroy the Mon in Proxmox GUI
+
+# Change the location setting in ceph.conf
+
+# Recreate the Mon
+
+
+
+
+# Create the nvme db partitions (assuming 33G size for a 5TB OSD)
+sgdisk --new=1:2048:+33GiB --change-name="1:ceph block.db" --typecode="1:30cd0809-c2b2-499c-8879-2d6b78529876" --mbrtogpt /dev/nvme0n1
+sgdisk -n:$partition:0:+20G -c:$partition:'ceph mon' --typecode="1:30cd0809-c2b2-499c-8879-2d6b78529876" --mbrtogpt /dev/nvme0n1
+partprobe
+sgdisk -p /dev/nvme0n1
+
+## Migrate Bluestore Journal to another device (NVMe)
+
+#check status (get ceph journal size)
+ceph-bluestore-tool show-label --dev /var/lib/ceph/osd/ceph-1/block
+# get journal disk ceph device ls
+ceph-bluestore-tool bluefs-bdev-migrate –-dev-target /dev/nvme0n1p1 –-devs-source /var/lib/ceph/osd/ceph-1/block.db
+
+
+
+
+# get status and VG on that nvme
+vgs
+pvs
+
+# create the LV (logical volume) partition on VG from above
+lvcreate -aly --size 28G --name "cache_pool_osd" ceph-5d1836c0-209a-4a0e-839f-6f52e3dacb2f
+
+# Create the cluster key for this new OSD
+/usr/bin/ceph --cluster ceph --name client.bootstrap-osd --keyring /var/lib/ceph/bootstrap-osd/ceph.keyring -i - osd new 6a29ec1e-ee7a-4421-97cf-efb54b173c45
+
+# Create the osd on that LV
+
+# remove VG/LV
+lvremove ceph-5d1836c0-209a-4a0e-839f-6f52e3dacb2f/cache_pool_osd
+
+
+LSBLK
+root@pve23:~# lsblk
+NAME                                                                                                  MAJ:MIN RM   SIZE RO TYPE MOUNTPOINT
+sdc                                                                                                     8:32   0 465.8G  0 disk
+└─ceph--7f035bfa--4b36--4940--ade5--47e4058e2ed0-osd--block--0310c28e--bbb5--4f69--862b--7e455ceedf6a 253:17   0   465G  0 lvm
+nvme0n1                                                                                               259:0    0 894.3G  0 disk
+├─ceph--5d1836c0--209a--4a0e--839f--6f52e3dacb2f-osd--db--94957be8--246f--4d20--90a5--eeb595803d17    253:0    0     4G  0 lvm
+├─ceph--5d1836c0--209a--4a0e--839f--6f52e3dacb2f-cache_pool_osd                                       253:15   0    28G  0 lvm
+└─ceph--5d1836c0--209a--4a0e--839f--6f52e3dacb2f-osd--db--e6f0d9fa--da46--48fe--ab1c--f7a42dc45afa    253:16   0     4G  0 lvm
+
+ADD
+/bin/lsblk --json -o path,parttype
+/sbin/lvs -S lv_name=~^osd-' -o devices,lv_name,lv_tags --noheadings --readonly --separator;'
+/sbin/zpool list -HPLv
+/sbin/pvs --noheadings --readonly -o pv_name
+/bin/udevadm info -p /sys/block/nvme0n1 --query all
+/bin/udevadm info -p /sys/block/sdc --query all
+create OSD on /dev/sdc (bluestore)
+creating block.db on '/dev/nvme0n1'
+/sbin/vgs --separator:'--noheadings --units b --unbuffered --nosuffix --options vg_name,vg_size,vg_free,lv_count,pv_name,pv_size,pv_free
+/sbin/lvcreate -aly --size 4194304k --name osd-db-5ea72ff5-cd75-487a-aef5-2a4a75e0ec84 ceph-5d1836c0-209a-4a0e-839f-6f52e3dacb2f
+/sbin/lvcreate -aly --size 4194304k --name osd-db-5ea72ff5-cd75-487a-aef5-2a4a75e0ec84 ceph-5d1836c0-209a-4a0e-839f-6f52e3dacb2f
+  Logical volume "osd-db-5ea72ff5-cd75-487a-aef5-2a4a75e0ec84" created.
+using 'ceph-5d1836c0-209a-4a0e-839f-6f52e3dacb2f/osd-db-5ea72ff5-cd75-487a-aef5-2a4a75e0ec84' for block.db
+ceph-volume lvm create --cluster-fsid e44fbe1c-b1c7-481d-bd25-dc595eae2d13' --block.db ceph-5d1836c0-209a-4a0e-839f-6f52e3dacb2f/osd-db-5ea72ff5-cd75-487a-aef5-2a4a75e0ec84
+wipe disk/partition: /dev/sdc
+/bin/dd if=/dev/zero bs=1M conv=fdatasync count=200 of=/dev/sdc
+200+0 records in
+200+0 records out
+209715200 bytes (210 MB, 200 MiB) copied, 2.43166 s, 86.2 MB/s
+ceph-volume lvm create --cluster-fsid e44fbe1c-b1c7-481d-bd25-dc595eae2d13 --block.db ceph-5d1836c0-209a-4a0e-839f-6f52e3dacb2f/osd-db-5ea72ff5-cd75-487a-aef5-2a4a75e0ec84 --data /dev/sdc
+Running command: /usr/bin/ceph-authtool --gen-print-key
+Running command: /usr/bin/ceph --cluster ceph --name client.bootstrap-osd --keyring /var/lib/ceph/bootstrap-osd/ceph.keyring -i - osd new bf73c67c-8557-4a4a-9128-0c78feb7e7db
+Running command: /sbin/vgcreate -s 1G --force --yes ceph-8351d2fe-e34a-4169-a8f3-a759b4d70036 /dev/sdc
+ stdout: Physical volume "/dev/sdc" successfully created.
+ stdout: Volume group "ceph-8351d2fe-e34a-4169-a8f3-a759b4d70036" successfully created
+Running command: /sbin/lvcreate --yes -l 100%FREE -n osd-block-bf73c67c-8557-4a4a-9128-0c78feb7e7db ceph-8351d2fe-e34a-4169-a8f3-a759b4d70036
+ stdout: Logical volume "osd-block-bf73c67c-8557-4a4a-9128-0c78feb7e7db" created.
+Running command: /usr/bin/ceph-authtool --gen-print-key
+Running command: /bin/mount -t tmpfs tmpfs /var/lib/ceph/osd/ceph-12
+--> Absolute path not found for executable: selinuxenabled
+--> Ensure $PATH environment variable contains common executable locations
+Running command: /bin/chown -h ceph:ceph /dev/ceph-8351d2fe-e34a-4169-a8f3-a759b4d70036/osd-block-bf73c67c-8557-4a4a-9128-0c78feb7e7db
+Running command: /bin/chown -R ceph:ceph /dev/dm-16
+Running command: /bin/ln -s /dev/ceph-8351d2fe-e34a-4169-a8f3-a759b4d70036/osd-block-bf73c67c-8557-4a4a-9128-0c78feb7e7db /var/lib/ceph/osd/ceph-12/block
+Running command: /usr/bin/ceph --cluster ceph --name client.bootstrap-osd --keyring /var/lib/ceph/bootstrap-osd/ceph.keyring mon getmap -o /var/lib/ceph/osd/ceph-12/activate.monmap
+ stderr: 2020-02-14 18:19:07.358 7fb1e1d27700 -1 auth: unable to find a keyring on /etc/pve/priv/ceph.client.bootstrap-osd.keyring: (2) No such file or directory
+2020-02-14 18:19:07.358 7fb1e1d27700 -1 AuthRegistry(0x7fb1dc080e78) no keyring found at /etc/pve/priv/ceph.client.bootstrap-osd.keyring, disabling cephx
+ stderr: got monmap epoch 20
+Running command: /usr/bin/ceph-authtool /var/lib/ceph/osd/ceph-12/keyring --create-keyring --name osd.12 --add-key AQB/1kZeJ4aiNxAA0AMEEckzty3cifXO804Avw==
+ stdout: creating /var/lib/ceph/osd/ceph-12/keyring
+added entity osd.12 auth(key=AQB/1kZeJ4aiNxAA0AMEEckzty3cifXO804Avw==)
+Running command: /bin/chown -R ceph:ceph /var/lib/ceph/osd/ceph-12/keyring
+Running command: /bin/chown -R ceph:ceph /var/lib/ceph/osd/ceph-12/
+Running command: /bin/chown -h ceph:ceph /dev/ceph-5d1836c0-209a-4a0e-839f-6f52e3dacb2f/osd-db-5ea72ff5-cd75-487a-aef5-2a4a75e0ec84
+Running command: /bin/chown -R ceph:ceph /dev/dm-15
+Running command: /usr/bin/ceph-osd --cluster ceph --osd-objectstore bluestore --mkfs -i 12 --monmap /var/lib/ceph/osd/ceph-12/activate.monmap --keyfile - --bluestore-block-db-path /dev/ceph-5d1836c0-209a-4a0e-839f-6f52e3dacb2f/osd-db-5ea72ff5-cd75-487a-aef5-2a4a75e0ec84 --osd-data /var/lib/ceph/osd/ceph-12/ --osd-uuid bf73c67c-8557-4a4a-9128-0c78feb7e7db --setuser ceph --setgroup ceph
+--> ceph-volume lvm prepare successful for: /dev/sdc
+Running command: /bin/chown -R ceph:ceph /var/lib/ceph/osd/ceph-12
+Running command: /usr/bin/ceph-bluestore-tool --cluster=ceph prime-osd-dir --dev /dev/ceph-8351d2fe-e34a-4169-a8f3-a759b4d70036/osd-block-bf73c67c-8557-4a4a-9128-0c78feb7e7db --path /var/lib/ceph/osd/ceph-12 --no-mon-config
+Running command: /bin/ln -snf /dev/ceph-8351d2fe-e34a-4169-a8f3-a759b4d70036/osd-block-bf73c67c-8557-4a4a-9128-0c78feb7e7db /var/lib/ceph/osd/ceph-12/block
+Running command: /bin/chown -h ceph:ceph /var/lib/ceph/osd/ceph-12/block
+Running command: /bin/chown -R ceph:ceph /dev/dm-16
+Running command: /bin/chown -R ceph:ceph /var/lib/ceph/osd/ceph-12
+Running command: /bin/ln -snf /dev/ceph-5d1836c0-209a-4a0e-839f-6f52e3dacb2f/osd-db-5ea72ff5-cd75-487a-aef5-2a4a75e0ec84 /var/lib/ceph/osd/ceph-12/block.db
+Running command: /bin/chown -h ceph:ceph /dev/ceph-5d1836c0-209a-4a0e-839f-6f52e3dacb2f/osd-db-5ea72ff5-cd75-487a-aef5-2a4a75e0ec84
+Running command: /bin/chown -R ceph:ceph /dev/dm-15
+Running command: /bin/chown -h ceph:ceph /var/lib/ceph/osd/ceph-12/block.db
+Running command: /bin/chown -R ceph:ceph /dev/dm-15
+Running command: /bin/systemctl enable ceph-volume@lvm-12-bf73c67c-8557-4a4a-9128-0c78feb7e7db
+ stderr: Created symlink /etc/systemd/system/multi-user.target.wants/ceph-volume@lvm-12-bf73c67c-8557-4a4a-9128-0c78feb7e7db.service -> /lib/systemd/system/ceph-volume@.service.
+Running command: /bin/systemctl enable --runtime ceph-osd@12
+ stderr: Created symlink /run/systemd/system/ceph-osd.target.wants/ceph-osd@12.service -> /lib/systemd/system/ceph-osd@.service.
+Running command: /bin/systemctl start ceph-osd@12
+--> ceph-volume lvm activate successful for osd ID: 12
+--> ceph-volume lvm create successful for: /dev/sdc
+TASK OK
+
+
+DELETE
+destroy OSD osd.12
+$VAR1 = '/bin/systemctl';
+$VAR2 = 'stop';
+$VAR3 = 'ceph-osd@12';
+$VAR1 = '/bin/systemctl';
+$VAR2 = 'disable';
+$VAR3 = 'ceph-osd@12';
+Remove osd.12 from the CRUSH map
+Remove the osd.12 authentication key.
+Remove OSD osd.12
+$VAR1 = '/usr/sbin/ceph-volume';
+$VAR2 = 'lvm';
+$VAR3 = 'list';
+$VAR4 = '--format';
+$VAR5 = 'json';
+$VAR1 = '/usr/sbin/ceph-volume';
+$VAR2 = 'lvm';
+$VAR3 = 'zap';
+$VAR4 = '--osd-id';
+$VAR5 = '12';
+$VAR6 = '--destroy';
+--> Zapping: /dev/ceph-7f035bfa-4b36-4940-ade5-47e4058e2ed0/osd-block-0310c28e-bbb5-4f69-862b-7e455ceedf6a
+--> Unmounting /var/lib/ceph/osd/ceph-12
+Running command: /bin/umount -v /var/lib/ceph/osd/ceph-12
+ stderr: umount: /var/lib/ceph/osd/ceph-12 unmounted
+Running command: /bin/dd if=/dev/zero of=/dev/ceph-7f035bfa-4b36-4940-ade5-47e4058e2ed0/osd-block-0310c28e-bbb5-4f69-862b-7e455ceedf6a bs=1M count=10
+ stderr: 10+0 records in
+10+0 records out
+ stderr: 10485760 bytes (10 MB, 10 MiB) copied, 0.0209915 s, 500 MB/s
+--> Only 1 LV left in VG, will proceed to destroy volume group ceph-7f035bfa-4b36-4940-ade5-47e4058e2ed0
+Running command: /sbin/vgremove -v -f ceph-7f035bfa-4b36-4940-ade5-47e4058e2ed0
+ stderr: Removing ceph--7f035bfa--4b36--4940--ade5--47e4058e2ed0-osd--block--0310c28e--bbb5--4f69--862b--7e455ceedf6a (253:17)
+ stderr: Archiving volume group "ceph-7f035bfa-4b36-4940-ade5-47e4058e2ed0" metadata (seqno 19).
+ stderr: Releasing logical volume "osd-block-0310c28e-bbb5-4f69-862b-7e455ceedf6a"
+ stderr: Creating volume group backup "/etc/lvm/backup/ceph-7f035bfa-4b36-4940-ade5-47e4058e2ed0" (seqno 20).
+ stdout: Logical volume "osd-block-0310c28e-bbb5-4f69-862b-7e455ceedf6a" successfully removed
+ stderr: Removing physical volume "/dev/sdc" from volume group "ceph-7f035bfa-4b36-4940-ade5-47e4058e2ed0"
+ stdout: Volume group "ceph-7f035bfa-4b36-4940-ade5-47e4058e2ed0" successfully removed
+--> Zapping: /dev/ceph-5d1836c0-209a-4a0e-839f-6f52e3dacb2f/osd-db-e6f0d9fa-da46-48fe-ab1c-f7a42dc45afa
+Running command: /bin/dd if=/dev/zero of=/dev/ceph-5d1836c0-209a-4a0e-839f-6f52e3dacb2f/osd-db-e6f0d9fa-da46-48fe-ab1c-f7a42dc45afa bs=1M count=10
+ stderr: 10+0 records in
+10+0 records out
+ stderr: 10485760 bytes (10 MB, 10 MiB) copied, 0.0130515 s, 803 MB/s
+--> More than 1 LV left in VG, will proceed to destroy LV only
+--> Removing LV because --destroy was given: /dev/ceph-5d1836c0-209a-4a0e-839f-6f52e3dacb2f/osd-db-e6f0d9fa-da46-48fe-ab1c-f7a42dc45afa
+Running command: /sbin/lvremove -v -f /dev/ceph-5d1836c0-209a-4a0e-839f-6f52e3dacb2f/osd-db-e6f0d9fa-da46-48fe-ab1c-f7a42dc45afa
+ stdout: Logical volume "osd-db-e6f0d9fa-da46-48fe-ab1c-f7a42dc45afa" successfully removed
+ stderr: Removing ceph--5d1836c0--209a--4a0e--839f--6f52e3dacb2f-osd--db--e6f0d9fa--da46--48fe--ab1c--f7a42dc45afa (253:16)
+ stderr: Archiving volume group "ceph-5d1836c0-209a-4a0e-839f-6f52e3dacb2f" metadata (seqno 90).
+ stderr: Releasing logical volume "osd-db-e6f0d9fa-da46-48fe-ab1c-f7a42dc45afa"
+ stderr: Creating volume group backup "/etc/lvm/backup/ceph-5d1836c0-209a-4a0e-839f-6f52e3dacb2f" (seqno 91).
+--> Zapping successful for OSD: 12
+$VAR1 = '/sbin/pvremove';
+$VAR2 = '/dev/nvme0n1';
+command '/sbin/pvremove /dev/nvme0n1' failed: Not a CODE reference at /usr/share/perl5/PVE/Tools.pm line 525.
+$VAR1 = '/sbin/pvremove';
+$VAR2 = '/dev/sdc';
+  Labels on physical volume "/dev/sdc" successfully wiped.
+TASK OK
+
+
+# Create a OSD with NO journal
+$ lslblk
+sdc                                                                                                     8:32   0 465.8G  0 disk
+└─ceph--376f5798--aba5--433e--bbfa--575e2b9c7bcb-osd--block--6a29ec1e--ee7a--4421--97cf--efb54b173c45 253:16   0   465G  0 lvm
+
+/bin/lsblk --json -o path,parttype
+/sbin/lvs -S lv_name=~^osd-' -o devices,lv_name,lv_tags --noheadings --readonly --separator;'
+/sbin/zpool list -HPLv
+/sbin/pvs --noheadings --readonly -o pv_name
+/bin/udevadm info -p /sys/block/nvme0n1 --query all
+/bin/udevadm info -p /sys/block/sdc --query all
+create OSD on /dev/sdc (bluestore)
+creating block.db on '/dev/nvme0n1'
+/sbin/vgs --separator:'--noheadings --units b --unbuffered --nosuffix --options vg_name,vg_size,vg_free,lv_count,pv_name,pv_size,pv_free
+/sbin/lvcreate -aly --size 4194304k --name osd-db-5ea72ff5-cd75-487a-aef5-2a4a75e0ec84 ceph-5d1836c0-209a-4a0e-839f-6f52e3dacb2f
+/sbin/lvcreate -aly --size 4194304k --name osd-db-5ea72ff5-cd75-487a-aef5-2a4a75e0ec84 ceph-5d1836c0-209a-4a0e-839f-6f52e3dacb2f
+  Logical volume "osd-db-5ea72ff5-cd75-487a-aef5-2a4a75e0ec84" created.
+using 'ceph-5d1836c0-209a-4a0e-839f-6f52e3dacb2f/osd-db-5ea72ff5-cd75-487a-aef5-2a4a75e0ec84' for block.db
+ceph-volume lvm create --cluster-fsid e44fbe1c-b1c7-481d-bd25-dc595eae2d13' --block.db ceph-5d1836c0-209a-4a0e-839f-6f52e3dacb2f/osd-db-5ea72ff5-cd75-487a-aef5-2a4a75e0ec84
+wipe disk/partition: /dev/sdc
+/bin/dd if=/dev/zero bs=1M conv=fdatasync count=200 of=/dev/sdc
+
+/bin/lsblk --json -o path,parttype
+/sbin/lvs -S lv_name=~^osd-' -o devices,lv_name,lv_tags --noheadings --readonly --separator;'
+/sbin/zpool list -HPLv
+/sbin/pvs --noheadings --readonly -o pv_name
+/bin/udevadm info -p /sys/block/nvme0n1 --query all
+/bin/udevadm info -p /sys/block/sdc --query all
+
+create OSD on /dev/sdc (bluestore)
+wipe disk/partition: /dev/sdc
+
+/bin/dd if=/dev/zero bs=1M conv=fdatasync count=200 of=/dev/sdc
+
+200+0 records in
+200+0 records out
+209715200 bytes (210 MB, 200 MiB) copied, 2.04645 s, 102 MB/s
+
+ceph-volume lvm create --cluster-fsid e44fbe1c-b1c7-481d-bd25-dc595eae2d13' --data /dev/sdc
+/usr/bin/ceph-authtool --gen-print-key
+/usr/bin/ceph --cluster ceph --name client.bootstrap-osd --keyring /var/lib/ceph/bootstrap-osd/ceph.keyring -i - osd new DBLVSpinnerNoJournal-6a29ec1e-ee7a-4421-97cf-efb54b173c45
+/sbin/vgcreate -s 1G --force --yes VGSpinnerNoJournal-ceph376f5798-aba5-433e-bbfa-575e2b9c7bcb /dev/sdc
+ stdout: Physical volume "/dev/sdc" successfully created.
+ stdout: Volume group "VGSpinnerNoJournal-ceph376f5798-aba5-433e-bbfa-575e2b9c7bcb" successfully created
+/sbin/lvcreate --yes -l 100%FREE -n DBLVSpinnerNoJournal-osdblock-6a29ec1e-ee7a-4421-97cf-efb54b173c45 VGSpinnerNoJournal-ceph376f5798-aba5-433e-bbfa-575e2b9c7bcb
+ stdout: Logical volume "DBLVSpinnerNoJournal-osdblock-6a29ec1e-ee7a-4421-97cf-efb54b173c45" created.
+/usr/bin/ceph-authtool --gen-print-key
+/bin/mount -t tmpfs tmpfs /var/lib/ceph/osd/ceph-12
+--> Absolute path not found for executable: selinuxenabled
+--> Ensure $PATH environment variable contains common executable locations
+/bin/chown -h ceph:ceph /dev/VGSpinnerNoJournal-ceph376f5798-aba5-433e-bbfa-575e2b9c7bcb/DBLVSpinnerNoJournal-osdblock-6a29ec1e-ee7a-4421-97cf-efb54b173c45
+/bin/chown -R ceph:ceph /dev/dm-16
+/bin/ln -s /dev/VGSpinnerNoJournal-ceph376f5798-aba5-433e-bbfa-575e2b9c7bcb/DBLVSpinnerNoJournal-osdblock-6a29ec1e-ee7a-4421-97cf-efb54b173c45 /var/lib/ceph/osd/ceph-12/block
+/usr/bin/ceph --cluster ceph --name client.bootstrap-osd --keyring /var/lib/ceph/bootstrap-osd/ceph.keyring mon getmap -o /var/lib/ceph/osd/ceph-12/activate.monmap
+ stderr: 2020-02-14 18:56:43.421 7f1def90d700 -1 auth: unable to find a keyring on /etc/pve/priv/ceph.client.bootstrap-osd.keyring: (2) No such file or directory
+2020-02-14 18:56:43.421 7f1def90d700 -1 AuthRegistry(0x7f1de8080f08) no keyring found at /etc/pve/priv/ceph.client.bootstrap-osd.keyring, disabling cephx
+ stderr: got monmap epoch 20
+/usr/bin/ceph-authtool /var/lib/ceph/osd/ceph-12/keyring --create-keyring --name osd.12 --add-key AQBY30ZeFCCCIhAArn9oryO6Lr7egnWHvSflMQ==
+ stdout: creating /var/lib/ceph/osd/ceph-12/keyring
+added entity osd.12 auth(key=AQBY30ZeFCCCIhAArn9oryO6Lr7egnWHvSflMQ==)
+/bin/chown -R ceph:ceph /var/lib/ceph/osd/ceph-12/keyring
+/bin/chown -R ceph:ceph /var/lib/ceph/osd/ceph-12/
+/usr/bin/ceph-osd --cluster ceph --osd-objectstore bluestore --mkfs -i 12 --monmap /var/lib/ceph/osd/ceph-12/activate.monmap --keyfile - --osd-data /var/lib/ceph/osd/ceph-12/ --osd-uuid DBLVSpinnerNoJournal-6a29ec1e-ee7a-4421-97cf-efb54b173c45 --setuser ceph --setgroup ceph
+--> ceph-volume lvm prepare successful for: /dev/sdc
+/bin/chown -R ceph:ceph /var/lib/ceph/osd/ceph-12
+/usr/bin/ceph-bluestore-tool --cluster=ceph prime-osd-dir --dev /dev/VGSpinnerNoJournal-ceph376f5798-aba5-433e-bbfa-575e2b9c7bcb/DBLVSpinnerNoJournal-osdblock-6a29ec1e-ee7a-4421-97cf-efb54b173c45 --path /var/lib/ceph/osd/ceph-12 --no-mon-config
+/bin/ln -snf /dev/VGSpinnerNoJournal-ceph376f5798-aba5-433e-bbfa-575e2b9c7bcb/DBLVSpinnerNoJournal-osdblock-6a29ec1e-ee7a-4421-97cf-efb54b173c45 /var/lib/ceph/osd/ceph-12/block
+/bin/chown -h ceph:ceph /var/lib/ceph/osd/ceph-12/block
+/bin/chown -R ceph:ceph /dev/dm-16
+/bin/chown -R ceph:ceph /var/lib/ceph/osd/ceph-12
+/bin/systemctl enable ceph-volume@lvm-12-6a29ec1e-ee7a-4421-97cf-efb54b173c45
+ stderr: Created symlink /etc/systemd/system/multi-user.target.wants/ceph-volume@lvm-12-DBLVSpinnerNoJournal-6a29ec1e-ee7a-4421-97cf-efb54b173c45.service -> /lib/systemd/system/ceph-volume@.service.
+/bin/systemctl enable --runtime ceph-osd@12
+/bin/systemctl start ceph-osd@12
+--> ceph-volume lvm activate successful for osd ID: 12
+--> ceph-volume lvm create successful for: /dev/sdc
+TASK OK
+
+# Delete OSD with no journal
+destroy OSD osd.12
+$VAR1 = '/bin/systemctl';
+$VAR2 = 'stop';
+$VAR3 = 'ceph-osd@12';
+$VAR1 = '/bin/systemctl';
+$VAR2 = 'disable';
+$VAR3 = 'ceph-osd@12';
+Remove osd.12 from the CRUSH map
+Remove the osd.12 authentication key.
+Remove OSD osd.12
+$VAR1 = '/usr/sbin/ceph-volume';
+$VAR2 = 'lvm';
+$VAR3 = 'list';
+$VAR4 = '--format';
+$VAR5 = 'json';
+$VAR1 = '/usr/sbin/ceph-volume';
+$VAR2 = 'lvm';
+$VAR3 = 'zap';
+$VAR4 = '--osd-id';
+$VAR5 = '12';
+$VAR6 = '--destroy';
+--> Zapping: /dev/VGSpinnerNoJournal-ceph376f5798-aba5-433e-bbfa-575e2b9c7bcb/DBLVSpinnerNoJournal-osdblock-6a29ec1e-ee7a-4421-97cf-efb54b173c45
+--> Unmounting /var/lib/ceph/osd/ceph-12
+Running command: /bin/umount -v /var/lib/ceph/osd/ceph-12
+ stderr: umount: /var/lib/ceph/osd/ceph-12 unmounted
+Running command: /bin/dd if=/dev/zero of=/dev/VGSpinnerNoJournal-ceph376f5798-aba5-433e-bbfa-575e2b9c7bcb/DBLVSpinnerNoJournal-osdblock-6a29ec1e-ee7a-4421-97cf-efb54b173c45 bs=1M count=10
+ stderr: 10+0 records in
+10+0 records out
+ stderr: 10485760 bytes (10 MB, 10 MiB) copied, 0.0947666 s, 111 MB/s
+--> Only 1 LV left in VG, will proceed to destroy volume group VGSpinnerNoJournal-ceph376f5798-aba5-433e-bbfa-575e2b9c7bcb
+Running command: /sbin/vgremove -v -f VGSpinnerNoJournal-ceph376f5798-aba5-433e-bbfa-575e2b9c7bcb
+ stderr: Removing ceph--376f5798--aba5--433e--bbfa--575e2b9c7bcb-osd--block--6a29ec1e--ee7a--4421--97cf--efb54b173c45 (253:16)
+ stderr: Archiving volume group "VGSpinnerNoJournal-ceph376f5798-aba5-433e-bbfa-575e2b9c7bcb" metadata (seqno 17).
+ stderr: Releasing logical volume "DBLVSpinnerNoJournal-osdblock-6a29ec1e-ee7a-4421-97cf-efb54b173c45"
+ stderr: Creating volume group backup "/etc/lvm/backup/VGSpinnerNoJournal-ceph376f5798-aba5-433e-bbfa-575e2b9c7bcb" (seqno 18).
+ stdout: Logical volume "DBLVSpinnerNoJournal-osdblock-6a29ec1e-ee7a-4421-97cf-efb54b173c45" successfully removed
+ stderr: Removing physical volume "/dev/sdc" from volume group "VGSpinnerNoJournal-ceph376f5798-aba5-433e-bbfa-575e2b9c7bcb"
+ stdout: Volume group "VGSpinnerNoJournal-ceph376f5798-aba5-433e-bbfa-575e2b9c7bcb" successfully removed
+--> Zapping successful for OSD: 12
+$VAR1 = '/sbin/pvremove';
+$VAR2 = '/dev/sdc';
+  Labels on physical volume "/dev/sdc" successfully wiped.
+
+
+TASK OK
+
+
+Add nvme
+
+$VAR1 = '/bin/lsblk';
+$VAR2 = '--json';
+$VAR3 = '-o';
+$VAR4 = 'path,parttype';
+$VAR1 = '/sbin/lvs';
+$VAR2 = '-S';
+$VAR3 = 'lv_name=~^osd-';
+$VAR4 = '-o';
+$VAR5 = 'devices,lv_name,lv_tags';
+$VAR6 = '--noheadings';
+$VAR7 = '--readonly';
+$VAR8 = '--separator';
+$VAR9 = ';';
+$VAR1 = '/sbin/zpool';
+$VAR2 = 'list';
+$VAR3 = '-HPLv';
+$VAR1 = '/sbin/pvs';
+$VAR2 = '--noheadings';
+$VAR3 = '--readonly';
+$VAR4 = '-o';
+$VAR5 = 'pv_name';
+$VAR1 = '/bin/udevadm';
+$VAR2 = 'info';
+$VAR3 = '-p';
+$VAR4 = '/sys/block/nvme0n1';
+$VAR5 = '--query';
+$VAR6 = 'all';
+create OSD on /dev/nvme0n1 (bluestore)
+wipe disk/partition: /dev/nvme0n1
+$VAR1 = '/bin/dd';
+$VAR2 = 'if=/dev/zero';
+$VAR3 = 'bs=1M';
+$VAR4 = 'conv=fdatasync';
+$VAR5 = 'count=200';
+$VAR6 = 'of=/dev/nvme0n1';
+200+0 records in
+200+0 records out
+209715200 bytes (210 MB, 200 MiB) copied, 0.260529 s, 805 MB/s
+$VAR1 = 'ceph-volume';
+$VAR2 = 'lvm';
+$VAR3 = 'create';
+$VAR4 = '--cluster-fsid';
+$VAR5 = 'e44fbe1c-b1c7-481d-bd25-dc595eae2d13';
+$VAR6 = '--data';
+$VAR7 = '/dev/nvme0n1';
+Running command: /usr/bin/ceph-authtool --gen-print-key
+Running command: /usr/bin/ceph --cluster ceph --name client.bootstrap-osd --keyring /var/lib/ceph/bootstrap-osd/ceph.keyring -i - osd new d63f09e2-1547-4a87-b023-19150f51c760
+Running command: /sbin/vgcreate -s 1G --force --yes ceph-debb2941-0351-4263-8820-5dce1e1dd04b /dev/nvme0n1
+ stdout: Physical volume "/dev/nvme0n1" successfully created.
+ stdout: Volume group "ceph-debb2941-0351-4263-8820-5dce1e1dd04b" successfully created
+Running command: /sbin/lvcreate --yes -l 100%FREE -n osd-block-d63f09e2-1547-4a87-b023-19150f51c760 ceph-debb2941-0351-4263-8820-5dce1e1dd04b
+ stdout: Logical volume "osd-block-d63f09e2-1547-4a87-b023-19150f51c760" created.
+Running command: /usr/bin/ceph-authtool --gen-print-key
+Running command: /bin/mount -t tmpfs tmpfs /var/lib/ceph/osd/ceph-9
+--> Absolute path not found for executable: selinuxenabled
+--> Ensure $PATH environment variable contains common executable locations
+Running command: /bin/chown -h ceph:ceph /dev/ceph-debb2941-0351-4263-8820-5dce1e1dd04b/osd-block-d63f09e2-1547-4a87-b023-19150f51c760
+Running command: /bin/chown -R ceph:ceph /dev/dm-0
+Running command: /bin/ln -s /dev/ceph-debb2941-0351-4263-8820-5dce1e1dd04b/osd-block-d63f09e2-1547-4a87-b023-19150f51c760 /var/lib/ceph/osd/ceph-9/block
+Running command: /usr/bin/ceph --cluster ceph --name client.bootstrap-osd --keyring /var/lib/ceph/bootstrap-osd/ceph.keyring mon getmap -o /var/lib/ceph/osd/ceph-9/activate.monmap
+ stderr: 2020-02-17 21:13:21.215 7f9c445b3700 -1 auth: unable to find a keyring on /etc/pve/priv/ceph.client.bootstrap-osd.keyring: (2) No such file or directory
+2020-02-17 21:13:21.215 7f9c445b3700 -1 AuthRegistry(0x7f9c3c080e78) no keyring found at /etc/pve/priv/ceph.client.bootstrap-osd.keyring, disabling cephx
+ stderr: got monmap epoch 20
+Running command: /usr/bin/ceph-authtool /var/lib/ceph/osd/ceph-9/keyring --create-keyring --name osd.9 --add-key AQDe80peTiXQLBAAwlPs1EJf/WT97Rmj4fAO8A==
+ stdout: creating /var/lib/ceph/osd/ceph-9/keyring
+added entity osd.9 auth(key=AQDe80peTiXQLBAAwlPs1EJf/WT97Rmj4fAO8A==)
+Running command: /bin/chown -R ceph:ceph /var/lib/ceph/osd/ceph-9/keyring
+Running command: /bin/chown -R ceph:ceph /var/lib/ceph/osd/ceph-9/
+Running command: /usr/bin/ceph-osd --cluster ceph --osd-objectstore bluestore --mkfs -i 9 --monmap /var/lib/ceph/osd/ceph-9/activate.monmap --keyfile - --osd-data /var/lib/ceph/osd/ceph-9/ --osd-uuid d63f09e2-1547-4a87-b023-19150f51c760 --setuser ceph --setgroup ceph
+--> ceph-volume lvm prepare successful for: /dev/nvme0n1

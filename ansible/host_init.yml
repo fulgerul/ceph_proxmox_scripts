@@ -1,0 +1,221 @@
+---
+# Update packages on linuxex, REBOOT
+- hosts: linux_debian, linux_old_debian
+  gather_facts: true
+  become: yes
+  serial: 1
+
+  tasks:
+    # - name: check NTP configuration
+    #   find:
+    #     path: /etc/systemd
+    #     patterns: "timesyncd.conf"
+    #     contains: '[^\#]NTP\={{ ntp_server }}'
+    #   register: ntp_config_check
+
+    # - name: add NTP servers
+    #   lineinfile:
+    #     path: /etc/systemd/timesyncd.conf
+    #     state: present
+    #     regexp: '\#NTP\=.*'
+    #     line: NTP="{{ ntp_server }}"
+    #   when: ntp_config_check.matched > 0
+    #   register: ntp_servers_added
+
+    # - name: restart NTP service after config change
+    #   systemd:
+    #     state: restarted
+    #     name: systemd-timesyncd
+    #   when: not ntp_servers_added is skipped
+
+    - name: update apt cache
+      apt:
+       autoclean: yes
+       autoremove: yes
+       update_cache: yes
+       pkg: 
+          - ifupdown2
+          - iperf3
+          - net-tools
+          - nmon
+          - ncdu
+          # Docker install
+          - aptitude
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+          - python3-pip
+          - virtualenv
+          - python3-setuptools 
+       state: present
+       install_recommends: yes
+      register: apt_update
+    # Docker
+    - name: Add Docker GPG apt Key
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+
+    - name: Add Docker APT repository
+      apt_repository:
+         repo: deb [arch=amd64] https://download.docker.com/linux/{{ansible_distribution|lower}} {{ansible_distribution_release}} stable
+
+    - name: Install docker-ce and docker-compose
+      apt:
+       pkg:
+         - docker-ce
+         - docker-compose
+       update_cache: no
+       install_recommends: yes
+       state: present
+    
+    - name: Create docker group
+      group:
+       name: "docker"
+       state: present
+
+    - name: Adding user {{ansible_user}} to docker group  
+      user:
+       name: "{{ansible_user}}"
+       groups: "docker"
+       append: "yes"
+
+    - name: start and enable docker daemon
+      service:
+          name: docker
+          state: started
+          enabled: yes
+  
+    # Install docker-compose - INCOMPLETE
+
+    # Docker maintainance
+    - name: Clean up docker images
+      shell: "docker image prune --all --force"
+
+  # /Docker
+
+  # Install ceph client and key! - INCOMPLETE
+
+    - name: upgrade all packages
+      apt:
+       upgrade: dist
+
+    - name: check if reboot is required
+      stat:
+        path: /var/run/reboot-required
+      register: reboot_needed
+
+    - name: reboot host if needed
+      reboot:
+      register: rebooted
+      when: reboot_needed.stat.exists
+
+# Update packages on Promox, DO NOT REBOOT
+- hosts: proxmox
+  gather_facts: true
+  become: yes
+  serial: 1
+
+  tasks:
+
+    - name: is there a pve enterprise repo file
+      stat:
+        path: /etc/apt/sources.list.d/pve-enterprise.list
+      register: pve_ent_repo
+  
+
+    - name: remove enterprise repo file
+      file:
+       path: /etc/apt/sources.list.d/pve-enterprise.list
+       state: absent
+      when: pve_ent_repo.stat.exists
+      register: pve_ent_removed
+
+    - name: create pve community repo file and content
+      lineinfile:
+        path: /etc/apt/sources.list.d/pve-community.list
+        state: present
+        create: yes
+        line: 'deb http://download.proxmox.com/debian/pve buster pve-no-subscription'
+      when: not pve_ent_removed is skipped
+      register: pve_comm_created
+
+    # - name: check NTP configuration
+    #   find:
+    #     path: /etc/systemd
+    #     patterns: "timesyncd.conf"
+    #     contains: '[^\#]NTP\={{ ntp_server }}'
+    #   register: ntp_config_check
+
+    # - name: add NTP servers
+    #   lineinfile:
+    #     path: /etc/systemd/timesyncd.conf
+    #     state: present
+    #     regexp: '\#NTP\=.*'
+    #     line: NTP="{{ ntp_server }}"
+    #   when: ntp_config_check.matched > 0
+    #   register: ntp_servers_added
+
+    # - name: restart NTP service after config change
+    #   systemd:
+    #     state: restarted
+    #     name: systemd-timesyncd
+    #   when: not ntp_servers_added is skipped
+
+    - name: update apt cache
+      apt:
+       autoclean: yes
+       autoremove: yes
+       update_cache: yes
+       pkg: 
+          - ifupdown2
+          - iperf3
+          - net-tools
+          - ansible
+          - nmon
+          - ncdu
+       state: present
+      register: apt_update
+       
+    - name: upgrade all packages
+      apt:
+       upgrade: dist
+    
+    - name: check if reboot is required
+      stat:
+        path: /var/run/reboot-required
+      register: reboot_needed
+
+    
+    # Copy the docker config for UPS, restart docker UPS
+
+    # - name: check if nested virtualization is enabled
+    #   find:
+    #     path: /sys/module/kvm_intel/parameters
+    #     patterns: "nested"
+    #     contains: "Y"
+    #   register: results
+
+    # - name: enable nested virtualization if not present
+    #   lineinfile:
+    #     path: /etc/modprobe.d/kvm-intel.conf
+    #     state: present
+    #     create: yes
+    #     line: options kvm-intel nested=Y
+    #   register: config_added
+    #   when: results is failed
+
+    # - name: reload kernel if needed
+    #   shell: "{{ item }}"
+    #   with_items:
+    #      - modprobe -r kvm_intel
+    #      - modprobe kvm_intel
+    #   when: 
+    #     - not reboot_needed.stat.exists
+    #     - not config_added is skipped
+
+    # - name: reboot host if needed
+    #   reboot:
+    #   register: rebooted
+    #   when: reboot_needed.stat.exists
