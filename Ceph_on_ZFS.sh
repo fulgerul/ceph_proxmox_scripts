@@ -69,6 +69,8 @@ echo 'KERNEL=="zd*" SUBSYSTEM=="block" ACTION=="add|change" OWNER="ceph", GROUP=
 # Run Once - Turn off write cache on all disks
 echo 'ACTION=="add", SUBSYSTEM=="block", ENV{DEVTYPE}=="disk", RUN+="/usr/sbin/smartctl -s wcache,off $kernel"' >> /etc/udev/rules.d/99-perm.rules
 
+# Do not forget to limit the amount of RAM that ceph osd uses by adding this in ceph.cong [global]
+osd_memory_target = 2068709120 # 2GB max per OSD, let ZFS do its ARC thing!
 
 # DONE!
 
